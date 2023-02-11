@@ -1,3 +1,4 @@
+//go:build rpctest
 // +build rpctest
 
 package itest
@@ -62,6 +63,10 @@ var allTestCases = []*testCase{
 	{
 		name: "single hop invoice",
 		test: testSingleHopInvoice,
+	},
+	{
+		name: "two hop invoice",
+		test: testTwoHopsThisTime,
 	},
 	{
 		name: "sphinx replay persistence",

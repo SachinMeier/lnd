@@ -4432,6 +4432,59 @@ func assertAmountSent(amt btcutil.Amount, sndr, rcvr *lntest.HarnessNode) func()
 	}
 }
 
+func assertAmountRouted(amt btcutil.Amount, router, sndr, rcvr *lntest.HarnessNode) func() error {
+	return func() error {
+		listReq := &lnrpc.ListChannelsRequest{}
+		ctxb := context.Background()
+		ctxt, _ := context.WithTimeout(ctxb, defaultTimeout)
+		sndrListChannels, err := sndr.ListChannels(ctxt, listReq)
+		if err != nil {
+			return fmt.Errorf("unable to query for %s's channel "+
+				"list: %v", sndr.Name(), err)
+		}
+		sndrChannelID := sndrListChannels.Channels[0].ChanId
+
+		ctxt, _ = context.WithTimeout(ctxb, defaultTimeout)
+		rcvrListChannels, err := rcvr.ListChannels(ctxt, listReq)
+		if err != nil {
+			return fmt.Errorf("unable to query for %s's channel "+
+				"list: %v", rcvr.Name(), err)
+		}
+		rcvrChannelID := rcvrListChannels.Channels[0].ChanId
+
+		fwdHistoryReq := &lnrpc.ForwardingHistoryRequest{
+			StartTime:    0,
+			EndTime:      0,
+			IndexOffset:  0,
+			NumMaxEvents: 1,
+		}
+		ctxt, _ = context.WithTimeout(ctxb, defaultTimeout)
+		fwdResp, err := router.ForwardingHistory(ctxt, fwdHistoryReq)
+		if err != nil {
+			return fmt.Errorf("unable to query for %s's fwding history"+
+				"list: %v", router.Name(), err)
+		}
+		fwdEvent := fwdResp.ForwardingEvents[0]
+		if fwdEvent.ChanIdOut != rcvrChannelID {
+			return fmt.Errorf("mismatched out-channels: wanted %d, got %d",
+				rcvrChannelID, fwdEvent.ChanIdOut)
+		}
+		if fwdEvent.ChanIdIn != sndrChannelID {
+			return fmt.Errorf("mismatched in-channels: wanted %d, got %d",
+				sndrChannelID, fwdEvent.ChanIdIn)
+		}
+		if fwdEvent.AmtIn != uint64(amt) {
+			return fmt.Errorf("mismatched amount in: wanted %d, got %d",
+				amt, fwdEvent.AmtIn)
+		}
+		if fwdEvent.AmtOut != uint64(amt) {
+			return fmt.Errorf("mismatched amount out: wanted %d, got %d",
+				amt, fwdEvent.AmtOut)
+		}
+		return nil
+	}
+}
+
 // assertLastHTLCError checks that the last sent HTLC of the last payment sent
 // by the given node failed with the expected failure code.
 func assertLastHTLCError(t *harnessTest, node *lntest.HarnessNode,
